@@ -1,5 +1,5 @@
 # 🎓 AI Personal Learning Mentor
-
+Live Link:https://learning-mentor-ovk6zmsvzrggrcncaegmkv.streamlit.app/
 An AI-powered Streamlit application that helps students create a **personalized learning roadmap** based on their current skills and career goals. Built using the **Google Gemini API** with structured JSON outputs.
 
 ---
