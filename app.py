@@ -188,22 +188,39 @@ Return ONLY the JSON object matching the schema."""
 # ----------------------------------------------------------------------
 # GEMINI CALL
 # ----------------------------------------------------------------------
+MODEL_CANDIDATES = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+]
+
+
 def generate_roadmap(api_key, name, skills, goal, hours):
     client = genai.Client(api_key=api_key)
-
     prompt = build_user_prompt(name, skills, goal, hours)
 
-    response = client.models.generate_content(
-        model="gemini-flash-latest",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            response_mime_type="application/json",
-            response_schema=ROADMAP_SCHEMA,
-            temperature=0.7,
-        ),
-    )
-    return json.loads(response.text)
+    last_error = None
+    for model_name in MODEL_CANDIDATES:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    response_mime_type="application/json",
+                    response_schema=ROADMAP_SCHEMA,
+                    temperature=0.7,
+                ),
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            last_error = e
+            msg = str(e)
+            if "404" in msg or "NOT_FOUND" in msg or "no longer available" in msg:
+                continue
+            raise
+    raise last_error
 
 
 # ----------------------------------------------------------------------
