@@ -10,6 +10,7 @@ Run with:  streamlit run app.py
 
 import json
 import os
+import time
 from datetime import datetime
 
 import streamlit as st
@@ -186,7 +187,7 @@ Return ONLY the JSON object matching the schema."""
 
 
 # ----------------------------------------------------------------------
-# GEMINI CALL
+# GEMINI CALL (with model fallback + retry on busy/unavailable errors)
 # ----------------------------------------------------------------------
 MODEL_CANDIDATES = [
     "gemini-3.5-flash",
@@ -195,31 +196,38 @@ MODEL_CANDIDATES = [
     "gemini-2.5-flash-lite",
 ]
 
+RETRYABLE_ERRORS = (
+    "404", "NOT_FOUND", "no longer available",
+    "503", "UNAVAILABLE",
+    "429", "RESOURCE_EXHAUSTED",
+)
+
 
 def generate_roadmap(api_key, name, skills, goal, hours):
     client = genai.Client(api_key=api_key)
     prompt = build_user_prompt(name, skills, goal, hours)
 
     last_error = None
-    for model_name in MODEL_CANDIDATES:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    response_schema=ROADMAP_SCHEMA,
-                    temperature=0.7,
-                ),
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            last_error = e
-            msg = str(e)
-            if "404" in msg or "NOT_FOUND" in msg or "no longer available" in msg:
-                continue
-            raise
+    for attempt in range(2):  # try the whole model list up to 2 times
+        for model_name in MODEL_CANDIDATES:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        response_mime_type="application/json",
+                        response_schema=ROADMAP_SCHEMA,
+                        temperature=0.7,
+                    ),
+                )
+                return json.loads(response.text)
+            except Exception as e:
+                last_error = e
+                if any(code in str(e) for code in RETRYABLE_ERRORS):
+                    continue  # try the next model
+                raise
+        time.sleep(3)  # short pause before trying the list again
     raise last_error
 
 
